@@ -138,6 +138,20 @@ a.btn { display: inline-block; color: var(--ink); text-decoration: none; }
 .appt form label { display: grid; gap: 3px; font-size: 0.78rem; color: var(--muted); }
 .appt form .check { display: flex; gap: 6px; align-items: center; }
 
+.live-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.live-form .grow { flex: 1 1 280px; display: grid; gap: 4px; min-width: 0; }
+.live-form .grow input { width: 100%; box-sizing: border-box; }
+.pill.on { background: var(--accent); color: var(--surface); }
+.pill.warn { background: color-mix(in srgb, var(--hot) 16%, transparent); color: var(--hot); }
+.setup summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.setup .steps { display: grid; gap: 12px; padding-left: 20px; margin: 12px 0; font-size: 0.9rem; }
+.setup .steps ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); }
+.setup .steps ul b { color: var(--ink); }
+.setup code { font: 0.82rem var(--font-data); background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.code { position: relative; margin-top: 8px; }
+.code pre { margin: 0; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: 0.78rem/1.5 var(--font-data); font-variant-ligatures: none; }
+.code .copy { position: absolute; top: 6px; right: 6px; font-size: 0.75rem; padding: 3px 8px; }
+
 @media (max-width: 960px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .grid2 { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .howto { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -165,7 +179,7 @@ a.btn { display: inline-block; color: var(--ink); text-decoration: none; }
   </header>
 
   <div class="banner" id="banner">
-    <span><strong>Voorbeelddata.</strong> Deze cijfers zijn verzonnen. Laad hieronder je eigen chatexport om je echte meldingen te zien.</span>
+    <span><strong>Voorbeelddata.</strong> Deze cijfers zijn verzonnen. Koppel onderaan je telefoon of laad een chatexport om je echte meldingen te zien.</span>
   </div>
   <div id="filterbar" hidden></div>
 
@@ -216,8 +230,39 @@ a.btn { display: inline-block; color: var(--ink); text-decoration: none; }
     </div>
   </div>
 
+  <section class="panel" id="live">
+    <div class="panel-head"><h2>Automatisch vanaf je telefoon</h2><span class="pill" id="live-pill">niet gekoppeld</span></div>
+    <p class="privacy" style="margin:0">Je Android-telefoon zet elke WhatsApp-melding in een Google Sheet van jezelf. Het dashboard leest die Sheet via je Google Sheets-koppeling en ververst elke minuut.</p>
+    <form class="live-form" id="live-form">
+      <label class="field grow" for="sheet-url"><span>Link naar je Google Sheet</span><input id="sheet-url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" required></label>
+      <button type="submit" class="btn primary">Koppelen</button>
+      <button type="button" class="btn" id="live-retry" hidden>Toestemming geven</button>
+      <button type="button" class="btn ghost" id="live-off" hidden>Ontkoppelen</button>
+    </form>
+    <div class="status" id="live-status" role="status"></div>
+    <details class="setup">
+      <summary>Zo stel je het in (eenmalig, ongeveer 15 minuten)</summary>
+      <ol class="steps">
+        <li><b>Maak een Google Sheet.</b> Ga naar <a href="https://sheets.new" target="_blank" rel="noopener">sheets.new</a> en noem hem bijvoorbeeld “WhatsApp-meldingen”. Plak de link hierboven en klik op Koppelen.</li>
+        <li><b>Voeg het opslagscript toe.</b> In de Sheet: Extensies → Apps Script. Vervang alle code door de code hieronder. Verander <code>verander-dit-wachtwoord</code> in een eigen lang wachtwoord zonder spaties en klik op Opslaan.
+          <div class="code"><button type="button" class="btn copy" id="copy-script">Kopieer code</button><pre id="script-code"></pre></div></li>
+        <li><b>Zet het script online.</b> Implementeren → Nieuwe implementatie → type <b>Web-app</b>. Uitvoeren als: <b>Ik</b>. Wie heeft toegang: <b>Iedereen</b>. Klik op Implementeren, geef toestemming en kopieer de web-app-URL (eindigt op <code>/exec</code>).</li>
+        <li><b>Installeer MacroDroid</b> uit de Play Store en maak een nieuwe macro:
+          <ul>
+            <li>Trigger: Meldingen → <b>Melding ontvangen</b> → kies de app <b>WhatsApp</b>.</li>
+            <li>Actie: Web-interactie → <b>HTTP-verzoek</b>. Methode <b>GET</b>, URL = je web-app-URL.</li>
+            <li>Voeg drie queryparameters toe: <code>token</code> = je wachtwoord, <code>title</code> = magische tekst <b>Meldingstitel</b>, <code>text</code> = magische tekst <b>Meldingstekst</b>.</li>
+            <li>Sla de macro op en zet hem aan.</li>
+          </ul></li>
+        <li><b>Geef toegang en houd de app wakker.</b> Sta toe dat MacroDroid meldingen leest (de app vraagt erom) en zet batterijoptimalisatie voor MacroDroid uit (Instellingen → Apps → MacroDroid → Batterij → Onbeperkt).</li>
+        <li><b>Test het.</b> Laat iemand je een bericht sturen. Binnen een paar seconden staat er een regel in de Sheet en binnen een minuut in dit dashboard.</li>
+      </ol>
+      <p class="privacy">Gedempte chats geven geen melding en komen er dus niet in. Oudere berichten haal je eenmalig binnen met een chatexport hieronder.</p>
+    </details>
+  </section>
+
   <section class="panel" id="upload">
-    <div class="panel-head"><h2>Eigen chats laden</h2><button type="button" class="btn" id="reset" hidden>Terug naar voorbeeld</button></div>
+    <div class="panel-head"><h2>Eigen chats laden</h2><button type="button" class="btn" id="reset" hidden>Geladen chats wissen</button></div>
     <label class="drop" id="drop" for="file">
       <input id="file" type="file" accept=".txt,.zip,text/plain,application/zip" multiple>
       <strong>Sleep exportbestanden hierheen</strong>
@@ -252,7 +297,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch {} }
 };
 
-const state = { msgs: [], me: '', period: '30', chat: null, q: '', sample: true, claudeAppts: null };
+const state = { msgs: [], exportMsgs: [], liveMsgs: [], me: '', period: '30', chat: null, q: '', sample: true, claudeAppts: null };
 
 /* ---------- Parser for WhatsApp chat exports (Android + iPhone, NL/EN date formats) ---------- */
 const LINE = /^\[?(\d{1,4})[-/.](\d{1,2})[-/.](\d{2,4}),?\s+(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?\s*([AaPp]\.?\s?[Mm]\.?)?\]?\s*(?:-\s+)?(.*)$/;
@@ -314,7 +359,7 @@ async function loadFiles(files) {
   const status = $('#status');
   status.className = 'status';
   status.textContent = 'Bezig met lezen…';
-  if (state.sample) { state.msgs = []; state.sample = false; state.chat = null; }
+  if (state.sample) state.chat = null;
   state.claudeAppts = null;
   const ok = [], bad = [];
   for (const f of files) {
@@ -322,12 +367,11 @@ async function loadFiles(files) {
       const msgs = await readFile(f);
       if (!msgs.length) throw new Error('geen berichten herkend; is dit een WhatsApp-export?');
       const chat = msgs[0].chat;
-      state.msgs = state.msgs.filter(m => m.chat !== chat).concat(msgs);
+      state.exportMsgs = state.exportMsgs.filter(m => m.chat !== chat).concat(msgs);
       ok.push(`${chat} (${nf.format(msgs.length)})`);
     } catch (e) { bad.push(`${f.name}: ${e.message}`); }
   }
-  if (!state.msgs.length) { useSample(); }
-  state.msgs.sort((a, b) => a.date - b.date);
+  rebuild();
   pickMe();
   status.className = bad.length ? 'status err' : 'status';
   status.textContent = [ok.length ? 'Geladen: ' + ok.join(', ') + '.' : '', bad.join(' · ')].filter(Boolean).join(' ');
@@ -424,6 +468,16 @@ function makeSample() {
 }
 function useSample() { state.sample = true; state.chat = null; state.msgs = makeSample(); state.claudeAppts = null; }
 
+/* Exports and live notifications together; the sample only shows while both are empty */
+function rebuild() {
+  if (!state.exportMsgs.length && !state.liveMsgs.length) { if (!state.sample) useSample(); return; }
+  if (state.sample) { state.sample = false; state.chat = null; state.claudeAppts = null; }
+  const seen = new Set();
+  for (const m of state.exportMsgs) { const k = Math.floor(m.date / 60000); for (const d of [-1, 0, 1]) seen.add(`${m.chat}|${m.text}|${k + d}`); }
+  const live = state.liveMsgs.filter(m => !seen.has(`${m.chat}|${m.text}|${Math.floor(m.date / 60000)}`));
+  state.msgs = state.exportMsgs.concat(live).sort((a, b) => a.date - b.date);
+}
+
 /* ---------- Derived data ---------- */
 function window_() {
   const end = state.msgs.length ? state.msgs[state.msgs.length - 1].date : new Date();
@@ -447,7 +501,7 @@ const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
 function render() {
   document.querySelectorAll('#period button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.p === state.period)));
   $('#banner').hidden = !state.sample;
-  $('#reset').hidden = state.sample;
+  $('#reset').hidden = !state.exportMsgs.length;
 
   const fb = $('#filterbar');
   fb.hidden = !state.chat;
@@ -938,7 +992,165 @@ $('#addmanual').addEventListener('click', () => {
 $('#askclaude').addEventListener('click', askClaude);
 $('#showpast').addEventListener('change', renderAgenda);
 
-capability('mcp').then(m => { ui.mcp = m; renderAgenda(); });
+/* ---------- Live: notifications that MacroDroid writes into a Google Sheet ---------- */
+const SHEETS = 'Google Sheets';
+const SCRIPT = `const GEHEIM = 'verander-dit-wachtwoord';
+
+function doGet(e) { return opslaan(e); }
+function doPost(e) { return opslaan(e); }
+
+function opslaan(e) {
+  const p = (e && e.parameter) || {};
+  if (!p.token || p.token !== GEHEIM) return ContentService.createTextOutput('geweigerd');
+  const blad = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  if (blad.getLastRow() === 0) blad.appendRow(['tijd', 'titel', 'tekst']);
+  const tijd = Utilities.formatDate(new Date(), 'Europe/Amsterdam', 'yyyy-MM-dd HH:mm:ss');
+  blad.appendRow([alsTekst(tijd), alsTekst(p.title), alsTekst(p.text)]);
+  return ContentService.createTextOutput('ok');
+}
+
+// Een apostrof ervoor: Sheets bewaart het als tekst en voert nooit een formule uit
+function alsTekst(v) { return "'" + String(v || '').slice(0, 2000); }
+`;
+$('#script-code').textContent = SCRIPT;
+$('#copy-script').addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  try { await navigator.clipboard.writeText(SCRIPT); btn.textContent = 'Gekopieerd'; }
+  catch { const r = document.createRange(); r.selectNodeContents($('#script-code')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Geselecteerd: kopieer met Ctrl+C'; }
+  setTimeout(() => { btn.textContent = 'Kopieer code'; }, 2500);
+});
+
+const SKIP_TEXT = /^\d+ (nieuwe )?(berichten|messages)\b|berichten uit \d+ chats|messages from \d+ chats|controleren op nieuwe berichten|checking for new messages|whatsapp web is (nu )?actief|back-?up/i;
+const LIVE_MEDIA = /^(?:[\u{1F4F7}\u{1F3A5}\u{1F3A4}\u{1F4C4}\u{1F3B5}\u{1F47E}\u{1F4CD}]️?\s*)?(foto|video|spraakbericht|audio|sticker|gif|document|locatie|photo|voice message|location)\b/iu;
+
+function parseNotification(title, text) {
+  if (!title || !text || /^whatsapp$/i.test(title) || SKIP_TEXT.test(text)) return null;
+  title = title.replace(/\s*\(\d+ (berichten|messages)\)\s*$/i, '');
+  let m, chat, sender;
+  if ((m = /^(.+?) @ (.+)$/.exec(title))) { sender = m[1]; chat = m[2]; }
+  else if ((m = /^(.+?): (.+)$/.exec(title))) { chat = m[1]; sender = m[2]; }
+  else { chat = sender = title; }
+  return { chat: chat.trim(), sender: sender.trim(), text, media: LIVE_MEDIA.test(text) };
+}
+
+function rowsToMsgs(values) {
+  const out = [], last = new Map();
+  for (const r of values) {
+    if (!Array.isArray(r)) continue;
+    const [t, title, text] = [0, 1, 2].map(i => String(r[i] ?? '').trim());
+    const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(t);
+    if (!m) continue; // header row or a hand-edited cell
+    const date = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+    const n = parseNotification(title, text);
+    if (!n) continue;
+    // Android re-posts a stacked notification; count the same text from the same chat once per 3 minutes
+    const key = `${n.chat}|${n.sender}|${n.text}`;
+    if (last.has(key) && date - last.get(key) < 180000) continue;
+    last.set(key, date);
+    out.push(Object.assign(n, { date }));
+  }
+  return out;
+}
+
+function extractValues(p) {
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch { return []; } }
+  if (Array.isArray(p)) return p;
+  if (p && Array.isArray(p.values)) return p.values;
+  if (p && Array.isArray(p.valueRanges) && p.valueRanges[0]) return p.valueRanges[0].values || [];
+  return [];
+}
+
+function sheetIdFrom(s) {
+  const m = /\/spreadsheets\/d\/([a-zA-Z0-9_-]{20,})/.exec(s) || /^\s*([a-zA-Z0-9_-]{30,})\s*$/.exec(s);
+  return m ? m[1] : null;
+}
+
+const live = { unwatch: null, sig: '', at: 0 };
+function setLive(kind, text) {
+  const pill = $('#live-pill');
+  pill.className = 'pill' + (kind === 'ok' ? ' on' : kind === 'warn' ? ' warn' : '');
+  pill.textContent = { ok: 'live', warn: 'actie nodig', loading: 'bezig…', off: 'niet gekoppeld' }[kind];
+  const st = $('#live-status');
+  st.className = kind === 'warn' ? 'status err' : 'status';
+  st.textContent = text || '';
+  const connected = !!store.get('wa-radar-sheet');
+  $('#live-off').hidden = !connected;
+}
+
+function applyLive(result) {
+  const values = extractValues(result && result.payload);
+  live.at = (result && result.cache && result.cache.storedAt) || Date.now();
+  const lastRow = values.length ? JSON.stringify(values[values.length - 1]) : '';
+  const sig = values.length + '|' + lastRow;
+  const t = new Date(live.at);
+  if (sig !== live.sig) {
+    live.sig = sig;
+    state.liveMsgs = rowsToMsgs(values);
+    rebuild(); pickMe(); render();
+  }
+  setLive('ok', state.liveMsgs.length
+    ? `${nf.format(state.liveMsgs.length)} meldingen uit de Sheet · bijgewerkt om ${fmtTime(t)}`
+    : `Gekoppeld, maar er staan nog geen meldingen in de Sheet (bijgewerkt om ${fmtTime(t)}). Rond de stappen hieronder af en stuur jezelf een testbericht.`);
+}
+
+function liveError(e) {
+  const code = e && e.code;
+  $('#live-retry').hidden = !['approval_required', 'not_in_manifest', 'upstream_error'].includes(code);
+  const keep = state.liveMsgs.length ? ` De laatste stand van ${fmtTime(new Date(live.at))} blijft zichtbaar.` : '';
+  switch (code) {
+    case 'needs_reauth': return setLive('warn', 'Google Sheets moet opnieuw gekoppeld worden: claude.ai → Instellingen → Connectors.');
+    case 'server_not_connected': case 'selection_required': case 'server_not_found':
+      return setLive('warn', 'Google Sheets is niet gekoppeld aan Claude. Voeg het toe via claude.ai → Instellingen → Connectors en laad deze pagina opnieuw.');
+    case 'approval_required': case 'not_in_manifest':
+      return setLive('warn', 'Het dashboard heeft nog geen toestemming om je Sheet te lezen. Klik op “Toestemming geven”.');
+    case 'blocked_by_policy': return setLive('warn', 'Je organisatie staat niet toe dat deze pagina Google Sheets leest.');
+    case 'tool_error':
+      state.liveMsgs = []; rebuild(); render();
+      return setLive('warn', 'Google Sheets kon deze Sheet niet lezen. Controleer de link en of de Sheet van hetzelfde Google-account is als je koppeling.');
+    case 'not_granted': case 'capability_disabled': case 'capability_removed':
+      return setLive('warn', 'Automatisch laden werkt alleen als je het dashboard opent in claude.ai.');
+    default: return setLive('warn', 'Even geen verbinding met Google Sheets. Het dashboard probeert het elke minuut opnieuw.' + keep);
+  }
+}
+
+function startLive() {
+  if (live.unwatch) { live.unwatch(); live.unwatch = null; }
+  const id = store.get('wa-radar-sheet');
+  $('#live-retry').hidden = true;
+  if (!id) return setLive('off', '');
+  $('#sheet-url').value = `https://docs.google.com/spreadsheets/d/${id}`;
+  if (!ui.mcp) return setLive('warn', 'Automatisch laden werkt alleen als je het dashboard opent in claude.ai met Google Sheets gekoppeld.');
+  setLive('loading', 'Sheet wordt gelezen…');
+  live.unwatch = ui.mcp.watchTool(SHEETS, 'get_values', { spreadsheetId: id, range: 'A:C' },
+    ev => ev.type === 'data' ? applyLive(ev.result) : liveError(ev.error),
+    { refetchInterval: 60000 });
+}
+
+$('#live-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const id = sheetIdFrom($('#sheet-url').value);
+  if (!id) return setLive('warn', 'Dit lijkt geen Google Sheet-link. Kopieer de link uit de adresbalk van je Sheet; die begint met https://docs.google.com/spreadsheets/d/');
+  store.set('wa-radar-sheet', id);
+  live.sig = '';
+  startLive();
+});
+$('#live-off').addEventListener('click', () => {
+  if (live.unwatch) { live.unwatch(); live.unwatch = null; }
+  try { localStorage.removeItem('wa-radar-sheet'); } catch {}
+  $('#sheet-url').value = '';
+  state.liveMsgs = []; live.sig = ''; rebuild(); pickMe(); render();
+  setLive('off', 'Ontkoppeld. De Sheet zelf blijft bestaan.');
+});
+$('#live-retry').addEventListener('click', async () => {
+  const id = store.get('wa-radar-sheet');
+  if (!id || !ui.mcp) return;
+  $('#live-retry').hidden = true;
+  setLive('loading', 'Sheet wordt gelezen…');
+  try { applyLive(await ui.mcp.callTool(SHEETS, 'get_values', { spreadsheetId: id, range: 'A:C' })); startLive(); }
+  catch (e) { liveError(e); }
+});
+
+capability('mcp').then(m => { ui.mcp = m; renderAgenda(); startLive(); });
 capability('sample').then(s => { ui.sample = s; $('#askclaude').hidden = !s; });
 
 /* ---------- Events ---------- */
@@ -954,7 +1166,7 @@ $('#chats').addEventListener('click', e => {
 });
 $('#filterbar').addEventListener('click', e => { if (e.target.closest('#clearchat')) { state.chat = null; render(); } });
 $('#file').addEventListener('change', e => { if (e.target.files.length) loadFiles([...e.target.files]); e.target.value = ''; });
-$('#reset').addEventListener('click', () => { useSample(); pickMe(); $('#status').textContent = ''; render(); });
+$('#reset').addEventListener('click', () => { state.exportMsgs = []; state.claudeAppts = null; rebuild(); pickMe(); $('#status').textContent = 'Geladen chats gewist.'; render(); });
 const drop = $('#drop');
 ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
