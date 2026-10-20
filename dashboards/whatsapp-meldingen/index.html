@@ -112,6 +112,32 @@ header .sub { color: var(--muted); margin: 4px 0 0; }
 .btn:hover { border-color: var(--accent); }
 .privacy { font-size: 0.82rem; color: var(--muted); }
 
+.agenda-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 600; text-decoration: none; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { border-color: transparent; background: none; color: var(--muted); }
+.btn.ghost:hover { color: var(--ink); border-color: var(--line); }
+a.btn { display: inline-block; color: var(--ink); text-decoration: none; }
+.btn:disabled { opacity: .6; cursor: progress; }
+.appts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.appt { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.appt.done { border-color: var(--accent); background: var(--accent-soft); }
+.appt-when { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 0.85rem; }
+.appt-when .num { font-weight: 500; }
+.appt-when .in { color: var(--muted); font-size: 0.8rem; }
+.pill { font: 500 0.7rem/1 var(--font-data); text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 7px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.pill.bday { background: color-mix(in srgb, var(--hot) 16%, transparent); color: var(--hot); }
+.appt h3 { margin: 0; font: 600 1rem/1.3 var(--font-display); overflow-wrap: anywhere; }
+.appt .src { margin: 0; font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; }
+.appt .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.appt .msg-line { font-size: 0.82rem; }
+.appt .msg-line.err { color: var(--hot); }
+.appt form { display: grid; gap: 8px; }
+.appt form .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.appt form input[type="text"], .appt form input[type="date"], .appt form input[type="time"] { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 6px 8px; }
+.appt form label { display: grid; gap: 3px; font-size: 0.78rem; color: var(--muted); }
+.appt form .check { display: flex; gap: 6px; align-items: center; }
+
 @media (max-width: 960px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .grid2 { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .howto { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -144,6 +170,19 @@ header .sub { color: var(--muted); margin: 4px 0 0; }
   <div id="filterbar" hidden></div>
 
   <section class="kpis" id="kpis" aria-label="Samenvatting"></section>
+
+  <section class="panel" id="agenda">
+    <div class="panel-head">
+      <div><h2>Afspraken uit je chats</h2><p class="privacy" id="agenda-sub" style="margin:2px 0 0">Gevonden in je berichten. Controleer datum en tijd en zet ze met één tik in je agenda.</p></div>
+      <div class="agenda-tools">
+        <label class="field" for="showpast"><input type="checkbox" id="showpast"> verlopen tonen</label>
+        <button type="button" class="btn" id="askclaude" hidden>Laat Claude zoeken</button>
+        <button type="button" class="btn" id="addmanual">+ Afspraak</button>
+      </div>
+    </div>
+    <div class="status" id="agenda-status" role="status"></div>
+    <div class="appts" id="appts"></div>
+  </section>
 
   <div class="grid2">
     <section class="panel">
@@ -193,7 +232,7 @@ header .sub { color: var(--muted); margin: 4px 0 0; }
         <ol><li>Open de chat en tik op de naam bovenaan</li><li>Exporteer chat → <b>Zonder media</b></li><li>Bewaar het .zip-bestand in Bestanden</li></ol>
       </div>
     </div>
-    <p class="privacy">Je bestanden blijven in deze browser. De pagina leest ze lokaal en verstuurt niets. Alleen de gekozen naam bij “Ik ben” wordt onthouden op dit apparaat.</p>
+    <p class="privacy">Je bestanden blijven in deze browser en worden lokaal gelezen. Er gaat alleen iets de deur uit als jij op een knop drukt. “Zet in agenda” stuurt die ene afspraak naar je Google Agenda. “Laat Claude zoeken” stuurt de berichten van de laatste 45 dagen naar Claude om afspraken te vinden. Je naam en je afspraakkeuzes worden onthouden op dit apparaat.</p>
   </section>
 </div>
 
@@ -213,7 +252,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch {} }
 };
 
-const state = { msgs: [], me: '', period: '30', chat: null, q: '', sample: true };
+const state = { msgs: [], me: '', period: '30', chat: null, q: '', sample: true, claudeAppts: null };
 
 /* ---------- Parser for WhatsApp chat exports (Android + iPhone, NL/EN date formats) ---------- */
 const LINE = /^\[?(\d{1,4})[-/.](\d{1,2})[-/.](\d{2,4}),?\s+(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?\s*([AaPp]\.?\s?[Mm]\.?)?\]?\s*(?:-\s+)?(.*)$/;
@@ -276,6 +315,7 @@ async function loadFiles(files) {
   status.className = 'status';
   status.textContent = 'Bezig met lezen…';
   if (state.sample) { state.msgs = []; state.sample = false; state.chat = null; }
+  state.claudeAppts = null;
   const ok = [], bad = [];
   for (const f of files) {
     try {
@@ -331,19 +371,19 @@ function makeSample() {
   const chats = [
     { name: 'Ploeg N35 Wijhe', people: ['Henk', 'Jeroen', 'Sanne', 'Mark'], perDay: 11, weekend: 0.15, days: null,
       hours: profile([[5, 7, 3], [7, 16, 2], [16, 19, 1], [21, 24, 0.8], [0, 5, 0.6]]),
-      texts: ['Frees staat klaar bij km 12.4', 'Asfaltcentrale meldt 20 min vertraging', 'Wie neemt de afzetting mee?', 'Kernen genomen, ziet er goed uit', 'Vanavond start 21:30, zelfde ploeg', 'Walsen klaar met vak 3', 'Weegbonnen liggen in de keet', 'Regen verwacht na 14:00'] },
+      texts: ['Frees staat klaar bij km 12.4', 'Asfaltcentrale meldt 20 min vertraging', 'Wie neemt de afzetting mee?', 'Kernen genomen, ziet er goed uit', 'Start weer 21:30, zelfde ploeg', 'Walsen klaar met vak 3', 'Weegbonnen liggen in de keet', 'Regen verwacht na 14:00'] },
     { name: 'Projectteam Asfalt', people: ['Ingrid (WVB)', 'Peter', 'Femke'], perDay: 5, weekend: 0.05, days: null,
       hours: profile([[7, 9, 2], [9, 17, 2.5], [17, 19, 0.5]]),
       texts: ['Planning week 44 staat in Teams', 'Meerwerkopdracht is getekend', 'Kun je de opleverlijst checken?', 'Overleg verplaatst naar 10:00', 'Hoeveel ton is er gisteren verwerkt?'] },
     { name: 'Familie', people: ['Mam', 'Pap', 'Lotte'], perDay: 6, weekend: 1.5, days: null,
       hours: profile([[7, 9, 1], [12, 13, 1], [17, 22, 3]]),
-      texts: ['Zondag eten bij ons?', 'Foto van de hond 😄', 'Wie haalt oma op?', 'Gefeliciteerd!!', 'Bel je straks even?'] },
+      texts: ['Lekker gegeten?', 'Foto van de hond 😄', 'Wie haalt oma op?', 'Gefeliciteerd!!', 'Bel je straks even?'] },
     { name: 'Waterpolo H2', people: ['Daan', 'Bram', 'Koen', 'Trainer Wim'], perDay: 2, weekend: 1, days: { 2: 4, 4: 4 },
       hours: profile([[17, 23, 3], [8, 17, 0.3]]),
       texts: ['Wie kan er zaterdag?', 'Training gaat door', 'Bad 2 vanavond', 'Nog 1 keeper nodig', 'Lekker gespeeld mannen'] },
     { name: 'Jasper', people: ['Jasper'], perDay: 3, weekend: 1.3, days: null,
       hours: profile([[12, 14, 1], [18, 24, 2]]),
-      texts: ['Gym morgen 06:30?', 'Hoeveel eiwit zit daarin?', 'Haha', 'Zag je die EX30 review?', 'Ik zit er om 7 uur'] },
+      texts: ['Nog gymmen deze week?','Hoeveel eiwit zit daarin?', 'Haha', 'Zag je die EX30 review?', 'Ik zit er om 7 uur'] },
     { name: 'Buurtapp De Pol', people: ['Gerrit', 'Annemiek', 'Yusuf', 'Ria'], perDay: 1.5, weekend: 1.2, days: null,
       hours: profile([[8, 22, 1]]),
       texts: ['Wie mist een kat?', 'Container staat weer vol', 'Vreemde auto in de straat', 'Bedankt allemaal!'] },
@@ -368,9 +408,21 @@ function makeSample() {
       }
     }
   }
+  // Scripted messages so the agenda panel has something to find
+  const at = (back, h, m) => { const d = sod(new Date(end - back * DAY)); d.setHours(h, m); return d; };
+  [
+    [1, 18, 12, 'Jasper', 'Jasper', 'Zaterdag om 20:00 bij mij FIFA? Neem jij chips mee'],
+    [2, 19, 40, 'Familie', 'Mam', 'Zondag eten bij ons om 17:30? Oma komt ook'],
+    [3, 20, 5, 'Familie', 'Lotte', 'Niet vergeten: oma is 14 november jarig!'],
+    [1, 21, 15, 'Waterpolo H2', 'Trainer Wim', 'Wedstrijd zaterdag 14:00 in De Vrijheid, verzamelen 13:15'],
+    [330, 8, 2, 'Familie', 'Pap', 'Gefeliciteerd Lotte!! Fijne dag meid'],
+  ].forEach(([back, h, m, chat, sender, text]) => {
+    const date = at(back, h, m);
+    if (date <= end) out.push({ chat, sender, date, text, media: false });
+  });
   return out.sort((a, b) => a.date - b.date);
 }
-function useSample() { state.sample = true; state.chat = null; state.msgs = makeSample(); }
+function useSample() { state.sample = true; state.chat = null; state.msgs = makeSample(); state.claudeAppts = null; }
 
 /* ---------- Derived data ---------- */
 function window_() {
@@ -412,6 +464,7 @@ function render() {
   renderChats(start, end);
   renderSenders(list);
   renderFeed(list);
+  renderAgenda();
 }
 
 function renderKpis(list, start, days) {
@@ -537,6 +590,356 @@ function renderFeed(list) {
       <span class="msg">${m.media ? '<span class="tag">media</span>' : esc(txt)}</span></li>`;
   }).join('') : `<li class="empty">${q ? 'Niets gevonden voor deze zoekterm.' : 'Geen meldingen in deze periode.'}</li>`;
 }
+
+/* ---------- Agenda: find appointments and birthdays in messages ---------- */
+const WEEKDAYS = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+const MONTH_RE = /\b(\d{1,2})\s+(jan(?:uari)?|feb(?:ruari)?|mrt|maart|apr(?:il)?|mei|juni?|juli?|aug(?:ustus)?|sept?(?:ember)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b(?:\s+(\d{4}))?/i;
+const MONTH_KEYS = ['jan', 'feb', 'ma', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+const PLAN_RE = /\b(afspraak|afspreken|eten|etentje|borrel|feest|feestje|bbq|barbecue|bios|bioscoop|film|wedstrijd|training|langs|drinken|koffie|lunch|lunchen|diner|uit|kom|komen|komt|gaan|zien|bruiloft|concert|gym|sporten|zwemmen|verzamelen|bij mij|bij ons)\b/i;
+const CONGRATS_RE = /\b(gefeliciteerd|fijne verjaardag|happy birthday|hoera)\b/i;
+const NAME = "([A-ZÀ-Ý][a-zà-ÿ'-]+)";
+const pad2 = n => String(n).padStart(2, '0');
+const toYMD = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fromYMD = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDaysYMD = (s, n) => { const d = fromYMD(s); d.setDate(d.getDate() + n); return toYMD(d); };
+function hashId(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
+
+function findDate(t, base) {
+  const b = sod(base);
+  let m = MONTH_RE.exec(t);
+  if (m) {
+    const key = m[2].toLowerCase();
+    const mo = key === 'mrt' ? 2 : MONTH_KEYS.findIndex(k => key.startsWith(k));
+    const day = +m[1];
+    if (mo >= 0 && day >= 1 && day <= 31) {
+      let d = new Date(m[3] ? +m[3] : b.getFullYear(), mo, day);
+      if (!m[3] && d < b) d = new Date(b.getFullYear() + 1, mo, day);
+      return d;
+    }
+  }
+  m = /\b(\d{1,2})[-/](\d{1,2})(?:[-/](\d{2,4}))?\b/.exec(t);
+  if (m && +m[1] >= 1 && +m[1] <= 31 && +m[2] >= 1 && +m[2] <= 12) {
+    let y = m[3] ? +m[3] : b.getFullYear(); if (y < 100) y += 2000;
+    let d = new Date(y, +m[2] - 1, +m[1]);
+    if (!m[3] && d < b) d = new Date(y + 1, +m[2] - 1, +m[1]);
+    return d;
+  }
+  if (/\bovermorgen\b/i.test(t)) return new Date(+b + 2 * DAY);
+  if (/\bmorgen(avond|middag|ochtend|vroeg)?\b/i.test(t)) return new Date(b.getFullYear(), b.getMonth(), b.getDate() + 1);
+  if (/\b(vandaag|vanavond|vanmiddag|vanochtend|vannacht)\b/i.test(t)) return b;
+  m = /\b(volgende week\s+)?(maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)(avond|middag|ochtend)?\b/i.exec(t);
+  if (m) {
+    const target = WEEKDAYS.indexOf(m[2].toLowerCase());
+    let diff = (target - b.getDay() + 7) % 7 || 7;
+    if (m[1] && diff < 7) diff += 7;
+    return new Date(b.getFullYear(), b.getMonth(), b.getDate() + diff);
+  }
+  return null;
+}
+
+function findTime(t) {
+  const evening = /avond|'s avonds|vanavond/i.test(t), morning = /ochtend|'s ochtends|morgens|vroeg/i.test(t);
+  let m = /\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/.exec(t);
+  if (m) { let h = +m[1]; if (evening && h < 12) h += 12; return `${pad2(h)}:${m[2]}`; }
+  let h = null, min = 0;
+  if ((m = /\bhalf\s+([1-9]|1[0-2])\b/i.exec(t))) { h = +m[1] - 1; min = 30; }
+  else if ((m = /\b(?:om\s+)?([1-9]|1\d|2[0-3])\s*(?:uur|u)\b/i.exec(t))) h = +m[1];
+  if (h === null) return '';
+  if (h >= 1 && h <= 7 && !morning) h += 12; // "om 7 uur" in a chat almost always means the evening
+  if (evening && h < 12) h += 12;
+  return `${pad2(h)}:${pad2(min)}`;
+}
+
+function nextYearly(d, today) {
+  let n = new Date(today.getFullYear(), d.getMonth(), d.getDate());
+  if (n < today) n = new Date(today.getFullYear() + 1, d.getMonth(), d.getDate());
+  return n;
+}
+
+function participants() {
+  const map = new Map();
+  for (const m of state.msgs) { if (m.sender === state.me) continue; if (!map.has(m.chat)) map.set(m.chat, new Set()); map.get(m.chat).add(m.sender); }
+  return map;
+}
+
+function snippet(text, n = 70) { const s = text.replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+function detectAppointments() {
+  const out = [], seen = new Set(), today = sod(new Date());
+  const people = participants();
+  const isDirect = chat => (people.get(chat)?.size || 0) === 1;
+  const last = state.msgs.length ? state.msgs[state.msgs.length - 1].date : new Date();
+  const recentFrom = new Date(+last - 60 * DAY);
+  for (const m of state.msgs) {
+    if (m.media) continue;
+    const t = m.text;
+    // Birthdays: a congratulation is a yearly date; "X is 14 november jarig" names it outright
+    if (/\bjarig\b|\bverjaardag\b/i.test(t) && !CONGRATS_RE.test(t)) {
+      const d = findDate(t, m.date);
+      if (d) {
+        let name = (/([a-zà-ÿ'-]+)\s+(?:is|wordt)\b[^.?!]*\bjarig/i.exec(t) || new RegExp('verjaardag van\\s+' + NAME, 'i').exec(t) || [])[1];
+        if (name && /^(hij|zij|ze|die|dat|het|wie|er|ook|nog|al|niet|wel|je|jij|u|dit|wat)$/i.test(name)) name = '';
+        if (name) name = name[0].toUpperCase() + name.slice(1);
+        if (!name && /\bik ben\b[^.?!]*jarig|mijn verjaardag/i.test(t)) name = m.sender;
+        if (!name && isDirect(m.chat)) name = m.chat;
+        if (name) addBirthday(name, d, m);
+        continue;
+      }
+    }
+    if (CONGRATS_RE.test(t)) {
+      let name = (new RegExp('(?:gefeliciteerd|verjaardag|birthday|hoera)[,!\\s]+(?:met\\s+)?' + NAME, 'i').exec(t) || [])[1];
+      if (name && /^(met|en|van|allemaal|jullie|meid|man|jongen|schat|lieverd|joh)$/i.test(name)) name = '';
+      if (!name && m.sender === state.me && isDirect(m.chat)) name = m.chat;
+      if (name) addBirthday(name, m.date, m);
+      continue;
+    }
+    if (m.date < recentFrom) continue;
+    const d = findDate(t, m.date);
+    if (!d) continue;
+    const time = findTime(t);
+    if (!time && !PLAN_RE.test(t)) continue;
+    const date = toYMD(d);
+    const start = time ? new Date(`${date}T${time}`) : d;
+    if (start < sod(m.date)) continue;
+    const key = `${m.chat}|${date}|${time}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id: hashId(key + m.text), kind: 'afspraak', title: `${m.chat}: ${snippet(t, 60)}`, date, time, allDay: !time, yearly: false, chat: m.chat, from: `${m.sender}: ${snippet(t, 140)}`, location: '', source: 'auto' });
+  }
+  function addBirthday(name, d, m) {
+    const k = 'bday|' + name.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push({ id: hashId(k), kind: 'verjaardag', title: `Verjaardag ${name}`, date: toYMD(nextYearly(d, today)), time: '', allDay: true, yearly: true, chat: m.chat, from: `${m.sender}: ${snippet(m.text, 140)}`, location: '', source: 'auto' });
+  }
+  return out;
+}
+
+/* Per-viewer choices: what was added, ignored, edited or entered by hand */
+const agendaStore = (() => {
+  let v; try { v = JSON.parse(store.get('wa-radar-agenda') || '{}'); } catch { v = {}; }
+  return Object.assign({ added: {}, dismissed: {}, edits: {}, manual: [] }, v);
+})();
+const saveAgenda = () => store.set('wa-radar-agenda', JSON.stringify(agendaStore));
+
+const ui = { editing: null, busy: {}, msg: {}, mcp: undefined, sample: undefined };
+const capability = name => (window.claude && typeof window.claude.use === 'function') ? window.claude.use(name).catch(() => null) : Promise.resolve(null);
+
+function allAppointments() {
+  const base = state.claudeAppts || detectAppointments();
+  return base.concat(agendaStore.manual)
+    .filter(a => !agendaStore.dismissed[a.id])
+    .map(a => Object.assign({}, a, agendaStore.edits[a.id] || {}));
+}
+
+function endOf(a) {
+  if (a.allDay) return { date: addDaysYMD(a.date, 1), time: '' };
+  const s = new Date(`${a.date}T${a.time}`); const e = new Date(+s + 2 * 3600e3);
+  return { date: toYMD(e), time: `${pad2(e.getHours())}:${pad2(e.getMinutes())}` };
+}
+function describe(a) { return `Uit WhatsApp-chat "${a.chat || 'handmatig'}"${a.from ? `\n${a.from}` : ''}`; }
+
+function gcalLink(a) {
+  const e = endOf(a);
+  const p = new URLSearchParams({ action: 'TEMPLATE', text: a.title, details: describe(a) });
+  p.set('dates', a.allDay ? `${a.date.replace(/-/g, '')}/${e.date.replace(/-/g, '')}`
+    : `${a.date.replace(/-/g, '')}T${a.time.replace(':', '')}00/${e.date.replace(/-/g, '')}T${e.time.replace(':', '')}00`);
+  if (a.location) p.set('location', a.location);
+  if (a.yearly) p.set('recur', 'RRULE:FREQ=YEARLY');
+  return 'https://calendar.google.com/calendar/render?' + p.toString();
+}
+
+function whenLabel(a) {
+  const d = fromYMD(a.date);
+  return `${WD[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''} · ${a.allDay ? 'hele dag' : a.time}`;
+}
+function inLabel(a) {
+  const n = Math.round((fromYMD(a.date) - sod(new Date())) / DAY);
+  if (n === 0) return 'vandaag'; if (n === 1) return 'morgen'; if (n === -1) return 'gisteren';
+  return n > 0 ? `over ${n} dagen` : `${-n} dagen geleden`;
+}
+
+function renderAgenda() {
+  const today = toYMD(new Date());
+  const showPast = $('#showpast').checked;
+  const list = allAppointments()
+    .filter(a => showPast || a.date >= today)
+    .sort((a, b) => (a.date + (a.time || '00:00')).localeCompare(b.date + (b.time || '00:00')));
+  const src = state.claudeAppts ? 'Gevonden door Claude.' : 'Automatisch herkend in je berichten.';
+  $('#agenda-sub').textContent = `${src} Controleer datum en tijd en zet ze met één tik in je agenda.`;
+  $('#appts').innerHTML = list.length ? list.map(cardHTML).join('')
+    : `<p class="empty">${showPast ? 'Geen afspraken gevonden.' : 'Geen komende afspraken gevonden. Zet “verlopen tonen” aan, laat Claude zoeken of voeg er zelf een toe.'}</p>`;
+}
+
+function cardHTML(a) {
+  const id = esc(a.id);
+  const added = agendaStore.added[a.id];
+  const pill = a.kind === 'verjaardag' ? '<span class="pill bday">Verjaardag</span>' : '<span class="pill">Afspraak</span>';
+  const tag = a.source === 'claude' ? ' · via Claude' : a.source === 'handmatig' ? ' · zelf toegevoegd' : '';
+  if (ui.editing === a.id) {
+    return `<article class="appt" data-id="${id}"><form data-form="${id}">
+      <label for="t-${id}">Titel<input type="text" id="t-${id}" name="title" value="${esc(a.title)}" required maxlength="200"></label>
+      <div class="two"><label for="d-${id}">Datum<input type="date" id="d-${id}" name="date" value="${esc(a.date)}" required></label>
+      <label for="h-${id}">Tijd<input type="time" id="h-${id}" name="time" value="${esc(a.time)}"${a.allDay ? ' disabled' : ''}></label></div>
+      <label for="l-${id}">Locatie<input type="text" id="l-${id}" name="location" value="${esc(a.location || '')}" maxlength="200"></label>
+      <div class="two"><label class="check" for="a-${id}"><input type="checkbox" id="a-${id}" name="allDay"${a.allDay ? ' checked' : ''}> hele dag</label>
+      <label class="check" for="y-${id}"><input type="checkbox" id="y-${id}" name="yearly"${a.yearly ? ' checked' : ''}> elk jaar</label></div>
+      <div class="actions"><button type="submit" class="btn primary">Opslaan</button><button type="button" class="btn ghost" data-act="cancel">Annuleren</button></div>
+    </form></article>`;
+  }
+  const msg = ui.msg[a.id];
+  let main;
+  if (added) {
+    main = `<span class="msg-line">✓ Staat in je agenda${typeof added === 'string' ? ` · <a href="${esc(added)}" target="_blank" rel="noopener">bekijken</a>` : ''}</span>`;
+  } else if (ui.mcp) {
+    main = `<button type="button" class="btn primary" data-act="add"${ui.busy[a.id] ? ' disabled' : ''}>${ui.busy[a.id] ? 'Bezig…' : 'Zet in agenda'}</button>`;
+  } else {
+    main = `<a class="btn primary" href="${esc(gcalLink(a))}" target="_blank" rel="noopener" data-act="link">Zet in Google Agenda</a>`;
+  }
+  const fallback = !added && ui.mcp && msg && msg.link ? `<a class="btn" href="${esc(gcalLink(a))}" target="_blank" rel="noopener" data-act="link">Via Google Agenda-link</a>` : '';
+  return `<article class="appt${added ? ' done' : ''}" data-id="${id}">
+    <div class="appt-when">${pill}<span class="num">${whenLabel(a)}</span><span class="in">${inLabel(a)}${a.yearly ? ' · jaarlijks' : ''}</span></div>
+    <h3>${esc(a.title)}</h3>
+    ${a.from ? `<p class="src">${esc(a.chat || '')}${tag} · “${esc(a.from)}”</p>` : `<p class="src">${tag.slice(3)}</p>`}
+    <div class="actions">${main}${fallback}
+      <button type="button" class="btn ghost" data-act="edit">Wijzig</button>
+      <button type="button" class="btn ghost" data-act="dismiss">${a.source === 'handmatig' ? 'Verwijder' : 'Negeer'}</button></div>
+    ${msg ? `<span class="msg-line${msg.err ? ' err' : ''}">${esc(msg.text)}</span>` : ''}
+  </article>`;
+}
+
+const CAL = 'Google Calendar';
+function calendarError(e) {
+  switch (e && e.code) {
+    case 'needs_reauth': return { text: 'Google Agenda moet opnieuw gekoppeld worden: claude.ai → Instellingen → Connectors. Of gebruik de link.', link: true };
+    case 'server_not_connected': case 'selection_required': case 'server_not_found':
+      return { text: 'Google Agenda is niet gekoppeld. Voeg het toe in claude.ai → Instellingen → Connectors, of gebruik de link.', link: true };
+    case 'not_in_manifest': case 'approval_required': case 'blocked_by_policy': case 'not_granted': case 'capability_disabled': case 'capability_removed':
+      return { text: 'Deze pagina mag niet in je Google Agenda schrijven. Geef toestemming als claude.ai erom vraagt, of gebruik de link.', link: true };
+    case 'tool_error': return { text: 'Google Agenda weigerde de afspraak: ' + (e.message || 'onbekende fout') + '. Controleer datum en tijd.', link: true };
+    case 'server_unavailable': case 'upstream_error': case 'cancelled':
+      return { text: 'Geen bevestiging van Google Agenda ontvangen. Kijk eerst in je agenda of de afspraak er al staat voordat je het opnieuw probeert.', link: true };
+    default: return { text: 'Het lukte niet om de afspraak toe te voegen. Gebruik de link.', link: true };
+  }
+}
+
+async function addToCalendar(a) {
+  if (ui.busy[a.id]) return;
+  ui.busy[a.id] = true; delete ui.msg[a.id]; renderAgenda();
+  const e = endOf(a);
+  const input = {
+    summary: a.title,
+    startTime: `${a.date}T${a.allDay ? '00:00' : a.time}:00`,
+    endTime: `${e.date}T${a.allDay ? '00:00' : e.time}:00`,
+    description: describe(a),
+  };
+  if (a.allDay) input.allDay = true;
+  if (a.location) input.location = a.location;
+  if (a.yearly) input.recurrenceData = ['RRULE:FREQ=YEARLY'];
+  try {
+    const res = await ui.mcp.callTool(CAL, 'create_event', input);
+    const p = res && res.payload;
+    const link = p && (p.htmlLink || (p.event && p.event.htmlLink));
+    agendaStore.added[a.id] = typeof link === 'string' && /^https:\/\//.test(link) ? link : true;
+    saveAgenda();
+  } catch (err) {
+    ui.msg[a.id] = Object.assign({ err: true }, calendarError(err));
+  } finally {
+    ui.busy[a.id] = false; renderAgenda();
+  }
+}
+
+async function askClaude() {
+  const btn = $('#askclaude'), status = $('#agenda-status');
+  if (!ui.sample) return;
+  const last = state.msgs.length ? state.msgs[state.msgs.length - 1].date : new Date();
+  const from = new Date(+last - 45 * DAY);
+  let lines = state.msgs.filter(m => m.date >= from && !m.media)
+    .map(m => `[${toYMD(m.date)} ${fmtTime(m.date)}] ${m.chat} | ${m.sender}: ${m.text.replace(/\s+/g, ' ').slice(0, 300)}`);
+  let text = lines.join('\n');
+  while (text.length > 150000) { lines = lines.slice(Math.floor(lines.length / 4)); text = lines.join('\n'); }
+  const prompt = `Je krijgt WhatsApp-berichten van een Nederlandse gebruiker (eigen naam in de export: "${state.me || 'onbekend'}"). Vandaag is ${toYMD(new Date())}.
+Zoek concrete afspraken en verjaardagen: plannen met een dag of datum (etentje, wedstrijd, borrel, langskomen, feest) en verjaardagen (iemand is jarig, of iemand wordt gefeliciteerd: dan is die datum elk jaar de verjaardag).
+Reken relatieve datums ("zaterdag", "morgen") om vanaf de datum van het bericht. Sla afspraken over die zijn afgezegd of al geweest zijn, en werkoverleg zonder vaste tijd.
+Antwoord met alleen een JSON-array. Elk item: {"kind":"afspraak"|"verjaardag","title":string (kort, Nederlands, bv. "Eten bij pa en ma" of "Verjaardag Lotte"),"date":"YYYY-MM-DD" (bij verjaardag: de eerstvolgende datum vanaf vandaag),"time":"HH:MM" of "","location":string of "","chat":string,"from":string (afzender en het bericht waarop het gebaseerd is, max 140 tekens)}.
+Voorbeeld: [{"kind":"afspraak","title":"FIFA bij Jasper","date":"2026-10-24","time":"20:00","location":"","chat":"Jasper","from":"Jasper: Zaterdag om 20:00 bij mij FIFA?"}]
+Geen afspraken gevonden: antwoord [].
+
+Berichten:
+${text}`;
+  btn.disabled = true; btn.textContent = 'Claude zoekt…';
+  status.className = 'status'; status.textContent = 'Claude leest de berichten van de laatste 45 dagen. Dit kan een minuut duren.';
+  try {
+    const arr = await ui.sample.json(prompt);
+    if (!Array.isArray(arr)) throw { code: 'invalid_json' };
+    const ok = arr.filter(x => x && typeof x.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x.date) && !isNaN(fromYMD(x.date)) && typeof x.title === 'string' && x.title.trim());
+    state.claudeAppts = ok.map(x => {
+      const time = typeof x.time === 'string' && /^\d{2}:\d{2}$/.test(x.time) ? x.time : '';
+      const kind = x.kind === 'verjaardag' ? 'verjaardag' : 'afspraak';
+      const title = x.title.trim().slice(0, 200);
+      return { id: hashId('claude|' + kind + '|' + title.toLowerCase() + '|' + (kind === 'verjaardag' ? '' : x.date + time)), kind, title, date: x.date, time,
+        allDay: !time, yearly: kind === 'verjaardag', chat: String(x.chat || ''), from: String(x.from || '').slice(0, 160), location: String(x.location || '').slice(0, 200), source: 'claude' };
+    });
+    status.textContent = `Claude vond ${ok.length} ${ok.length === 1 ? 'afspraak' : 'afspraken'}.`;
+  } catch (e) {
+    status.className = 'status err';
+    status.textContent = ({
+      not_granted: 'Je gaf geen toestemming om Claude te gebruiken. De automatische herkenning blijft werken.',
+      sampling_disabled: 'Claude is niet beschikbaar voor dit account.',
+      rate_limited: 'Je zit even aan je limiet. Probeer het later opnieuw.',
+      prompt_too_large: 'Te veel berichten voor één keer. Laad minder chats en probeer het opnieuw.',
+      invalid_json: 'Claude gaf geen bruikbaar antwoord. Probeer het opnieuw.',
+      refused: 'Claude kon deze berichten niet verwerken.',
+      session_expired: 'Log opnieuw in bij claude.ai en probeer het opnieuw.',
+      cancelled: '',
+    })[e && e.code] ?? 'Er ging iets mis bij Claude. Probeer het opnieuw.';
+    if (e && ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(e.code)) btn.hidden = true;
+  } finally {
+    btn.disabled = false; btn.textContent = state.claudeAppts ? 'Opnieuw zoeken met Claude' : 'Laat Claude zoeken';
+    renderAgenda();
+  }
+}
+
+$('#appts').addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const card = el.closest('.appt'); const id = card && card.dataset.id;
+  const a = allAppointments().find(x => x.id === id);
+  const act = el.dataset.act;
+  if (act === 'link' || !a) return;
+  if (act === 'add') addToCalendar(a);
+  else if (act === 'edit') { ui.editing = a.id; renderAgenda(); const f = $(`#t-${CSS.escape(a.id)}`); if (f) f.focus(); }
+  else if (act === 'cancel') { ui.editing = null; if (a.source === 'handmatig' && !a.title) agendaStore.manual = agendaStore.manual.filter(x => x.id !== a.id); renderAgenda(); }
+  else if (act === 'dismiss') {
+    if (a.source === 'handmatig') agendaStore.manual = agendaStore.manual.filter(x => x.id !== a.id);
+    else agendaStore.dismissed[a.id] = true;
+    saveAgenda(); renderAgenda();
+  }
+});
+$('#appts').addEventListener('change', e => {
+  if (e.target.name === 'allDay') { const t = e.target.form.elements.time; t.disabled = e.target.checked; if (!e.target.checked && !t.value) t.value = '19:00'; }
+});
+$('#appts').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target, id = f.dataset.form, el = f.elements;
+  const allDay = el.allDay.checked || !el.time.value;
+  const patch = { title: el.title.value.trim() || 'Afspraak', date: el.date.value, time: allDay ? '' : el.time.value, allDay, yearly: el.yearly.checked, location: el.location.value.trim() };
+  const manual = agendaStore.manual.find(x => x.id === id);
+  if (manual) Object.assign(manual, patch); else agendaStore.edits[id] = patch;
+  delete agendaStore.added[id]; delete ui.msg[id];
+  ui.editing = null; saveAgenda(); renderAgenda();
+});
+$('#addmanual').addEventListener('click', () => {
+  const a = { id: 'm' + Date.now().toString(36), kind: 'afspraak', title: '', date: toYMD(new Date(Date.now() + DAY)), time: '19:00', allDay: false, yearly: false, chat: '', from: '', location: '', source: 'handmatig' };
+  agendaStore.manual.push(a); saveAgenda();
+  $('#showpast').checked = false;
+  ui.editing = a.id; renderAgenda();
+  const f = $(`#t-${CSS.escape(a.id)}`); if (f) f.focus();
+});
+$('#askclaude').addEventListener('click', askClaude);
+$('#showpast').addEventListener('change', renderAgenda);
+
+capability('mcp').then(m => { ui.mcp = m; renderAgenda(); });
+capability('sample').then(s => { ui.sample = s; $('#askclaude').hidden = !s; });
 
 /* ---------- Events ---------- */
 $('#period').addEventListener('click', e => {
