@@ -1,0 +1,569 @@
+<title>WhatsApp Meldingenradar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control-room board — summary tiles up top, timeline + heatmap as the core, chat ranking and live feed below */
+:root {
+  --bg: #eef2f5;
+  --surface: #ffffff;
+  --ink: #14202b;
+  --muted: #5a6a77;
+  --line: #d8e0e6;
+  --accent: #1d6a86;
+  --accent-soft: #d9ebf2;
+  --hot: #c9761a;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e151b; --surface: #16212a; --ink: #e4ecf1; --muted: #93a5b2; --line: #26343f;
+    --accent: #5db2d0; --accent-soft: #1b3442; --hot: #f0a54a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e151b; --surface: #16212a; --ink: #e4ecf1; --muted: #93a5b2; --line: #26343f;
+  --accent: #5db2d0; --accent-soft: #1b3442; --hot: #f0a54a; color-scheme: dark;
+}
+
+body {
+  background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+h1, h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.05rem; font-weight: 600; }
+.eyebrow { font: 500 0.72rem/1 var(--font-data); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; color: inherit; }
+button:focus-visible, select:focus-visible, input:focus-visible, label.drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; justify-content: space-between; }
+header .sub { color: var(--muted); margin: 4px 0 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 6px 11px; cursor: pointer; font-size: 0.85rem; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.field { display: inline-flex; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--muted); }
+.field select, .field input { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 6px 8px; color: var(--ink); }
+
+.banner { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;
+  border: 1px dashed var(--hot); border-radius: 10px; padding: 10px 14px; font-size: 0.9rem; }
+.banner strong { color: var(--hot); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); font-size: 0.82rem; border: 0; cursor: pointer; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; min-width: 0; display: grid; gap: 14px; align-content: start; }
+.panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; }
+.panel-head .eyebrow { font-size: 0.68rem; }
+
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; min-width: 0; }
+.kpi .val { font: 600 1.6rem/1.1 var(--font-data); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi .val.text { font: 600 1.15rem/1.25 var(--font-display); }
+.kpi .note { font-size: 0.8rem; color: var(--muted); }
+.up { color: var(--hot); } .down { color: var(--accent); }
+
+.grid2 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; }
+.chart { width: 100%; overflow-x: auto; }
+.chart svg { display: block; }
+.chart text { fill: var(--muted); font: 11px var(--font-data); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.78rem; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+.rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rank button { width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: 8px; padding: 6px 8px; cursor: pointer; display: grid; gap: 4px; }
+.rank button:hover { border-color: var(--line); }
+.rank button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.rank .row { display: flex; justify-content: space-between; gap: 10px; font-size: 0.9rem; }
+.rank .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.senders li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: 0.9rem; padding: 4px 8px; }
+.senders .bar { grid-column: 1 / -1; }
+.senders .bar span { background: var(--muted); }
+
+.feed { list-style: none; margin: 0; padding: 0; display: grid; max-height: 520px; overflow-y: auto; }
+.feed li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; padding: 10px 2px; border-top: 1px solid var(--line); }
+.feed li:first-child { border-top: 0; }
+.feed time { font: 0.78rem/1.6 var(--font-data); color: var(--muted); grid-row: span 2; white-space: nowrap; }
+.feed .who { font-size: 0.82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed .who b { color: var(--ink); font-weight: 600; }
+.feed .msg { overflow-wrap: anywhere; }
+.tag { font: 0.72rem var(--font-data); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); }
+.night { color: var(--hot); }
+.empty { color: var(--muted); font-size: 0.9rem; padding: 12px 0; }
+
+.drop { display: grid; gap: 6px; place-items: center; text-align: center; border: 2px dashed var(--line); border-radius: 12px; padding: 22px 16px; cursor: pointer; transition: border-color .15s, background .15s; }
+.drop.over, .drop:hover { border-color: var(--accent); background: var(--accent-soft); }
+.drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.drop strong { font-family: var(--font-display); font-size: 1.05rem; }
+.howto { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; font-size: 0.88rem; }
+.howto ol { margin: 6px 0 0; padding-left: 20px; color: var(--muted); }
+.howto b { color: var(--ink); }
+.status { font-size: 0.85rem; color: var(--muted); }
+.status.err { color: var(--hot); }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 0.85rem; }
+.btn:hover { border-color: var(--accent); }
+.privacy { font-size: 0.82rem; color: var(--muted); }
+
+@media (max-width: 960px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .grid2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .howto { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">WhatsApp · chatexports</div>
+      <h1>Meldingenradar</h1>
+      <p class="sub">Wie stuurt je wanneer berichten, en welke chats houden je telefoon bezig.</p>
+    </div>
+    <div class="controls">
+      <div class="seg" id="period" role="group" aria-label="Periode">
+        <button type="button" data-p="7">7 d</button>
+        <button type="button" data-p="30">30 d</button>
+        <button type="button" data-p="90">90 d</button>
+        <button type="button" data-p="365">1 jaar</button>
+        <button type="button" data-p="all">Alles</button>
+      </div>
+      <label class="field" for="me">Ik ben
+        <select id="me"></select>
+      </label>
+    </div>
+  </header>
+
+  <div class="banner" id="banner">
+    <span><strong>Voorbeelddata.</strong> Deze cijfers zijn verzonnen. Laad hieronder je eigen chatexport om je echte meldingen te zien.</span>
+  </div>
+  <div id="filterbar" hidden></div>
+
+  <section class="kpis" id="kpis" aria-label="Samenvatting"></section>
+
+  <div class="grid2">
+    <section class="panel">
+      <div class="panel-head"><h2>Meldingen per <span id="binlabel">dag</span></h2><span class="eyebrow" id="rangelabel"></span></div>
+      <div class="chart" id="daily"></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>werkdag</span><span><i style="background:var(--accent);opacity:.45"></i>weekend</span><span><i style="background:var(--hot)"></i>drukste</span></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Wanneer piept je telefoon?</h2><span class="eyebrow">dag × uur</span></div>
+      <div class="chart" id="heat"></div>
+      <div class="legend"><span>Donkerder = meer meldingen.</span><span class="night">22:00–06:00 telt als nacht</span></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="panel">
+      <div class="panel-head"><h2>Laatste meldingen</h2>
+        <label class="field" for="q"><span class="eyebrow">zoek</span><input id="q" type="search" placeholder="naam of tekst"></label>
+      </div>
+      <ul class="feed" id="feed"></ul>
+    </section>
+    <div style="display:grid;gap:20px;align-content:start;min-width:0">
+      <section class="panel">
+        <div class="panel-head"><h2>Chats</h2><span class="eyebrow">klik om te filteren</span></div>
+        <ul class="rank" id="chats"></ul>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Afzenders</h2><span class="eyebrow">top 8</span></div>
+        <ul class="rank senders" id="senders"></ul>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel" id="upload">
+    <div class="panel-head"><h2>Eigen chats laden</h2><button type="button" class="btn" id="reset" hidden>Terug naar voorbeeld</button></div>
+    <label class="drop" id="drop" for="file">
+      <input id="file" type="file" accept=".txt,.zip,text/plain,application/zip" multiple>
+      <strong>Sleep exportbestanden hierheen</strong>
+      <span class="status">of klik om te kiezen · .txt of .zip · meerdere chats tegelijk mag</span>
+    </label>
+    <div class="status" id="status" role="status"></div>
+    <div class="howto">
+      <div><b>Android</b>
+        <ol><li>Open de chat</li><li>⋮ → Meer → Chat exporteren</li><li>Kies <b>Zonder media</b> en bewaar het .txt-bestand</li></ol>
+      </div>
+      <div><b>iPhone</b>
+        <ol><li>Open de chat en tik op de naam bovenaan</li><li>Exporteer chat → <b>Zonder media</b></li><li>Bewaar het .zip-bestand in Bestanden</li></ol>
+      </div>
+    </div>
+    <p class="privacy">Je bestanden blijven in deze browser. De pagina leest ze lokaal en verstuurt niets. Alleen de gekozen naam bij “Ik ben” wordt onthouden op dit apparaat.</p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const DAY = 864e5;
+const WD = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
+const MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+const nf = new Intl.NumberFormat('nl-NL');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sod = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const isNight = h => h >= 22 || h < 6;
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} }
+};
+
+const state = { msgs: [], me: '', period: '30', chat: null, q: '', sample: true };
+
+/* ---------- Parser for WhatsApp chat exports (Android + iPhone, NL/EN date formats) ---------- */
+const LINE = /^\[?(\d{1,4})[-/.](\d{1,2})[-/.](\d{2,4}),?\s+(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?\s*([AaPp]\.?\s?[Mm]\.?)?\]?\s*(?:-\s+)?(.*)$/;
+const MEDIA = /^<?(media weggelaten|media omitted|afbeelding weggelaten|image omitted|video weggelaten|video omitted|audio weggelaten|audio omitted|sticker weggelaten|sticker omitted|gif weggelaten|gif omitted|document weggelaten|document omitted)>?$/i;
+
+function parseExport(text, chat) {
+  text = text.replace(/[‎‏‪-‮﻿]/g, '').replace(/\r\n?/g, '\n');
+  const raw = [];
+  let cur = null;
+  for (const line of text.split('\n')) {
+    const m = LINE.exec(line);
+    if (m) { cur = { a: m[1], b: +m[2], c: m[3], h: +m[4], mi: +m[5], s: +(m[6] || 0), ap: m[7], rest: m[8] }; raw.push(cur); }
+    else if (cur) cur.rest += '\n' + line;
+  }
+  // Day/month order: Dutch default, switch when the data proves otherwise
+  let order = 'dmy';
+  if (raw.some(r => r.a.length === 4)) order = 'ymd';
+  else if (!raw.some(r => +r.a > 12) && raw.some(r => r.b > 12)) order = 'mdy';
+  const out = [];
+  for (const r of raw) {
+    let d, mo, y;
+    if (order === 'ymd') { y = +r.a; mo = r.b; d = +r.c; }
+    else if (order === 'mdy') { mo = +r.a; d = r.b; y = +r.c; }
+    else { d = +r.a; mo = r.b; y = +r.c; }
+    if (y < 100) y += 2000;
+    let h = r.h;
+    if (r.ap) { const pm = /p/i.test(r.ap); if (pm && h < 12) h += 12; if (!pm && h === 12) h = 0; }
+    const i = r.rest.indexOf(': ');
+    if (i < 1) continue; // system message (joined, changed subject, encryption notice)
+    const sender = r.rest.slice(0, i).trim();
+    if (sender.length > 60) continue;
+    const body = r.rest.slice(i + 2).trim();
+    const date = new Date(y, mo - 1, d, h, r.mi, r.s);
+    if (isNaN(date)) continue;
+    out.push({ chat, sender, date, text: body, media: MEDIA.test(body) });
+  }
+  return out;
+}
+
+function chatNameFrom(file) {
+  const n = file.replace(/\.(txt|zip)$/i, '')
+    .replace(/^WhatsApp[\s_-]*chat[\s_-]*(met|with|mit|avec|con|com)?[\s_-]*/i, '')
+    .replace(/^_?chat$/i, '').replace(/_/g, ' ').trim();
+  return n || 'Chat';
+}
+
+async function readFile(f) {
+  if (/\.zip$/i.test(f.name)) {
+    if (!window.JSZip) throw new Error('zip-ondersteuning kon niet laden; pak het bestand uit en kies het .txt-bestand');
+    const zip = await JSZip.loadAsync(f);
+    const entry = Object.values(zip.files).find(z => !z.dir && /\.txt$/i.test(z.name));
+    if (!entry) throw new Error('geen .txt-chat gevonden in het zip-bestand');
+    return parseExport(await entry.async('string'), chatNameFrom(f.name));
+  }
+  return parseExport(await f.text(), chatNameFrom(f.name));
+}
+
+async function loadFiles(files) {
+  const status = $('#status');
+  status.className = 'status';
+  status.textContent = 'Bezig met lezen…';
+  if (state.sample) { state.msgs = []; state.sample = false; state.chat = null; }
+  const ok = [], bad = [];
+  for (const f of files) {
+    try {
+      const msgs = await readFile(f);
+      if (!msgs.length) throw new Error('geen berichten herkend; is dit een WhatsApp-export?');
+      const chat = msgs[0].chat;
+      state.msgs = state.msgs.filter(m => m.chat !== chat).concat(msgs);
+      ok.push(`${chat} (${nf.format(msgs.length)})`);
+    } catch (e) { bad.push(`${f.name}: ${e.message}`); }
+  }
+  if (!state.msgs.length) { useSample(); }
+  state.msgs.sort((a, b) => a.date - b.date);
+  pickMe();
+  status.className = bad.length ? 'status err' : 'status';
+  status.textContent = [ok.length ? 'Geladen: ' + ok.join(', ') + '.' : '', bad.join(' · ')].filter(Boolean).join(' ');
+  render();
+}
+
+/* ---------- Who am I: messages from yourself are not notifications ---------- */
+function senders() {
+  const map = new Map();
+  for (const m of state.msgs) {
+    const s = map.get(m.sender) || { n: 0, chats: new Set() };
+    s.n++; s.chats.add(m.chat); map.set(m.sender, s);
+  }
+  return map;
+}
+function pickMe() {
+  const map = senders();
+  const saved = store.get('wa-radar-me');
+  if (state.sample) state.me = 'Jij';
+  else if (saved && map.has(saved)) state.me = saved;
+  else {
+    const nChats = new Set(state.msgs.map(m => m.chat)).size;
+    let best = '';
+    if (nChats > 1) {
+      let top = null;
+      for (const [name, s] of map) if (s.chats.size === nChats && (!top || s.n > top.n)) { top = s; best = name; }
+    }
+    state.me = best;
+  }
+  const sel = $('#me');
+  const names = [...map.keys()].sort((a, b) => a.localeCompare(b, 'nl'));
+  sel.innerHTML = `<option value="">(kies je naam)</option>` + names.map(n => `<option${n === state.me ? ' selected' : ''}>${esc(n)}</option>`).join('');
+}
+
+/* ---------- Sample data, clearly marked as such ---------- */
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function profile(ranges) { const w = Array(24).fill(0.05); for (const [a, b, v] of ranges) for (let h = a; h < b; h++) w[h] = v; return w; }
+function makeSample() {
+  const rnd = mulberry32(2402);
+  const pick = arr => arr[Math.floor(rnd() * arr.length)];
+  const chats = [
+    { name: 'Ploeg N35 Wijhe', people: ['Henk', 'Jeroen', 'Sanne', 'Mark'], perDay: 11, weekend: 0.15, days: null,
+      hours: profile([[5, 7, 3], [7, 16, 2], [16, 19, 1], [21, 24, 0.8], [0, 5, 0.6]]),
+      texts: ['Frees staat klaar bij km 12.4', 'Asfaltcentrale meldt 20 min vertraging', 'Wie neemt de afzetting mee?', 'Kernen genomen, ziet er goed uit', 'Vanavond start 21:30, zelfde ploeg', 'Walsen klaar met vak 3', 'Weegbonnen liggen in de keet', 'Regen verwacht na 14:00'] },
+    { name: 'Projectteam Asfalt', people: ['Ingrid (WVB)', 'Peter', 'Femke'], perDay: 5, weekend: 0.05, days: null,
+      hours: profile([[7, 9, 2], [9, 17, 2.5], [17, 19, 0.5]]),
+      texts: ['Planning week 44 staat in Teams', 'Meerwerkopdracht is getekend', 'Kun je de opleverlijst checken?', 'Overleg verplaatst naar 10:00', 'Hoeveel ton is er gisteren verwerkt?'] },
+    { name: 'Familie', people: ['Mam', 'Pap', 'Lotte'], perDay: 6, weekend: 1.5, days: null,
+      hours: profile([[7, 9, 1], [12, 13, 1], [17, 22, 3]]),
+      texts: ['Zondag eten bij ons?', 'Foto van de hond 😄', 'Wie haalt oma op?', 'Gefeliciteerd!!', 'Bel je straks even?'] },
+    { name: 'Waterpolo H2', people: ['Daan', 'Bram', 'Koen', 'Trainer Wim'], perDay: 2, weekend: 1, days: { 2: 4, 4: 4 },
+      hours: profile([[17, 23, 3], [8, 17, 0.3]]),
+      texts: ['Wie kan er zaterdag?', 'Training gaat door', 'Bad 2 vanavond', 'Nog 1 keeper nodig', 'Lekker gespeeld mannen'] },
+    { name: 'Jasper', people: ['Jasper'], perDay: 3, weekend: 1.3, days: null,
+      hours: profile([[12, 14, 1], [18, 24, 2]]),
+      texts: ['Gym morgen 06:30?', 'Hoeveel eiwit zit daarin?', 'Haha', 'Zag je die EX30 review?', 'Ik zit er om 7 uur'] },
+    { name: 'Buurtapp De Pol', people: ['Gerrit', 'Annemiek', 'Yusuf', 'Ria'], perDay: 1.5, weekend: 1.2, days: null,
+      hours: profile([[8, 22, 1]]),
+      texts: ['Wie mist een kat?', 'Container staat weer vol', 'Vreemde auto in de straat', 'Bedankt allemaal!'] },
+  ];
+  const end = new Date(); end.setMinutes(0, 0, 0);
+  const out = [];
+  for (let back = 400; back >= 0; back--) {
+    const day = sod(new Date(end - back * DAY));
+    const wd = day.getDay();
+    for (const c of chats) {
+      let rate = c.perDay * ((wd === 0 || wd === 6) ? c.weekend : 1) * (c.days && c.days[wd] ? c.days[wd] : 1);
+      const n = Math.round(rate * (0.4 + rnd() * 1.2));
+      const total = c.hours.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < n; i++) {
+        let r = rnd() * total, h = 0;
+        while (r > c.hours[h]) { r -= c.hours[h]; h++; }
+        const date = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.min(h, 23), Math.floor(rnd() * 60));
+        if (date > end) continue;
+        const mine = rnd() < 0.28;
+        const media = rnd() < 0.08;
+        out.push({ chat: c.name, sender: mine ? 'Jij' : pick(c.people), date, text: media ? '<Media weggelaten>' : pick(c.texts), media });
+      }
+    }
+  }
+  return out.sort((a, b) => a.date - b.date);
+}
+function useSample() { state.sample = true; state.chat = null; state.msgs = makeSample(); }
+
+/* ---------- Derived data ---------- */
+function window_() {
+  const end = state.msgs.length ? state.msgs[state.msgs.length - 1].date : new Date();
+  const first = state.msgs.length ? state.msgs[0].date : end;
+  const start = state.period === 'all' ? sod(first) : new Date(sod(end) - (+state.period - 1) * DAY);
+  return { start, end };
+}
+function incoming(start, end) {
+  return state.msgs.filter(m => m.sender !== state.me && m.date >= start && m.date <= end && (!state.chat || m.chat === state.chat));
+}
+function countBy(list, key) {
+  const map = new Map();
+  for (const m of list) { const k = key(m); map.set(k, (map.get(k) || 0) + 1); }
+  return [...map].sort((a, b) => b[1] - a[1]);
+}
+const fmtDate = d => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+const fmtTime = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+
+/* ---------- Render ---------- */
+function render() {
+  document.querySelectorAll('#period button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.p === state.period)));
+  $('#banner').hidden = !state.sample;
+  $('#reset').hidden = state.sample;
+
+  const fb = $('#filterbar');
+  fb.hidden = !state.chat;
+  fb.innerHTML = state.chat ? `<button type="button" class="chip" id="clearchat">Alleen chat: <b>${esc(state.chat)}</b> ×</button>` : '';
+
+  const { start, end } = window_();
+  const list = incoming(start, end);
+  const days = Math.max(1, Math.round((sod(end) - start) / DAY) + 1);
+  $('#rangelabel').textContent = `${fmtDate(start)} ${start.getFullYear()} – ${fmtDate(end)} ${end.getFullYear()}`;
+
+  renderKpis(list, start, days);
+  renderDaily(list, start, days);
+  renderHeat(list);
+  renderChats(start, end);
+  renderSenders(list);
+  renderFeed(list);
+}
+
+function renderKpis(list, start, days) {
+  const total = list.length;
+  let delta = '';
+  if (state.period !== 'all') {
+    const prev = incoming(new Date(start - days * DAY), new Date(start - 1)).length;
+    if (prev) {
+      const d = Math.round((total - prev) / prev * 100);
+      delta = `<span class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'} ${Math.abs(d)}%</span> t.o.v. vorige ${days} dagen`;
+    }
+  }
+  const chats = countBy(list, m => m.chat);
+  const hours = Array(24).fill(0); list.forEach(m => hours[m.date.getHours()]++);
+  const peak = hours.indexOf(Math.max(...hours));
+  const night = list.filter(m => isNight(m.date.getHours())).length;
+  const offWork = list.filter(m => { const wd = m.date.getDay(), h = m.date.getHours(); return wd === 0 || wd === 6 || h < 7 || h >= 17; }).length;
+  const tiles = [
+    ['Meldingen', nf.format(total), delta || `${days} dagen`],
+    ['Per dag', (total / days).toLocaleString('nl-NL', { maximumFractionDigits: 1 }), 'gemiddeld'],
+    ['Drukste chat', chats[0] ? esc(chats[0][0]) : '—', chats[0] ? `${pct(chats[0][1], total)}% van alles` : '', true],
+    ['Piekuur', total ? `${String(peak).padStart(2, '0')}:00` : '—', total ? `${nf.format(hours[peak])} meldingen in dit uur` : ''],
+    ["'s Nachts", `${pct(night, total)}%`, `${pct(offWork, total)}% buiten werktijd (ma–vr 7–17)`],
+  ];
+  $('#kpis').innerHTML = tiles.map(([l, v, n, isText]) =>
+    `<div class="kpi"><span class="eyebrow">${l}</span><span class="val${isText ? ' text' : ''}">${v}</span><span class="note">${n}</span></div>`).join('');
+}
+
+function niceMax(v) { if (v <= 5) return 5; const p = 10 ** Math.floor(Math.log10(v)); const f = v / p; return (f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+
+function renderDaily(list, start, days) {
+  const el = $('#daily');
+  const weekly = days > 120;
+  $('#binlabel').textContent = weekly ? 'week' : 'dag';
+  const nb = weekly ? Math.ceil(days / 7) : days;
+  const bins = Array(nb).fill(0);
+  for (const m of list) {
+    const i = Math.round((sod(m.date) - start) / DAY);
+    const b = weekly ? Math.floor(i / 7) : i;
+    if (b >= 0 && b < nb) bins[b]++;
+  }
+  const W = Math.max(320, el.clientWidth), H = 210, L = 38, R = 6, T = 10, B = 26;
+  const max = niceMax(Math.max(1, ...bins));
+  const bw = (W - L - R) / nb;
+  const y = v => T + (H - T - B) * (1 - v / max);
+  const peakI = bins.indexOf(Math.max(...bins));
+  let s = '';
+  for (const t of [0, max / 2, max]) s += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${nf.format(t)}</text>`;
+  bins.forEach((v, i) => {
+    const d = new Date(+start + (weekly ? i * 7 : i) * DAY);
+    const wkend = !weekly && (d.getDay() === 0 || d.getDay() === 6);
+    const fill = i === peakI && v ? 'var(--hot)' : 'var(--accent)';
+    const label = weekly ? `week van ${fmtDate(d)}` : `${WD[(d.getDay() + 6) % 7]} ${fmtDate(d)}`;
+    s += `<rect x="${L + i * bw + bw * 0.12}" y="${y(v)}" width="${Math.max(1, bw * 0.76)}" height="${H - B - y(v)}" fill="${fill}" fill-opacity="${wkend ? 0.45 : 1}" rx="${Math.min(2, bw / 4)}"><title>${label}: ${v} meldingen</title></rect>`;
+  });
+  const ticks = Math.min(nb, Math.max(2, Math.floor((W - L) / 80)));
+  for (let k = 0; k < ticks; k++) {
+    const i = Math.round(k * (nb - 1) / Math.max(1, ticks - 1));
+    const d = new Date(+start + (weekly ? i * 7 : i) * DAY);
+    const x = L + i * bw + bw / 2;
+    s += `<text x="${x}" y="${H - 8}" text-anchor="${k === 0 ? 'start' : k === ticks - 1 ? 'end' : 'middle'}">${fmtDate(d)}</text>`;
+  }
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Meldingen per ${weekly ? 'week' : 'dag'}">${s}</svg>`;
+}
+
+function renderHeat(list) {
+  const el = $('#heat');
+  const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
+  for (const m of list) grid[(m.date.getDay() + 6) % 7][m.date.getHours()]++;
+  const max = Math.max(1, ...grid.flat());
+  const W = Math.max(320, el.clientWidth), L = 26, T = 4, ch = 24, gap = 2;
+  const cw = (W - L) / 24;
+  const H = T + 7 * ch + 22;
+  let s = '';
+  // Night band behind the cells
+  s += `<rect x="${L}" y="${T - 2}" width="${cw * 6}" height="${7 * ch + 2}" fill="var(--hot)" fill-opacity="0.12"/>`;
+  s += `<rect x="${L + cw * 22}" y="${T - 2}" width="${cw * 2}" height="${7 * ch + 2}" fill="var(--hot)" fill-opacity="0.12"/>`;
+  grid.forEach((row, r) => {
+    s += `<text x="0" y="${T + r * ch + ch / 2 + 4}">${WD[r]}</text>`;
+    row.forEach((v, h) => {
+      const op = v ? 0.12 + 0.88 * (v / max) : 0;
+      s += `<rect x="${L + h * cw + gap / 2}" y="${T + r * ch + gap / 2}" width="${cw - gap}" height="${ch - gap}" rx="2" fill="${v ? 'var(--accent)' : 'var(--line)'}" fill-opacity="${v ? op.toFixed(2) : 0.5}"><title>${WD[r]} ${String(h).padStart(2, '0')}:00 – ${v} meldingen</title></rect>`;
+    });
+  });
+  for (let h = 0; h < 24; h += 3) s += `<text x="${L + h * cw}" y="${H - 6}">${String(h).padStart(2, '0')}</text>`;
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Meldingen per weekdag en uur">${s}</svg>`;
+}
+
+function renderChats(start, end) {
+  const all = state.msgs.filter(m => m.sender !== state.me && m.date >= start && m.date <= end);
+  const rows = countBy(all, m => m.chat);
+  const total = all.length;
+  const max = rows.length ? rows[0][1] : 1;
+  $('#chats').innerHTML = rows.length ? rows.map(([c, n]) =>
+    `<li><button type="button" data-chat="${esc(c)}" aria-pressed="${state.chat === c}">
+      <span class="row"><span class="name">${esc(c)}</span><span class="num">${nf.format(n)} · ${pct(n, total)}%</span></span>
+      <span class="bar"><span style="width:${(n / max * 100).toFixed(1)}%"></span></span></button></li>`).join('')
+    : '<li class="empty">Geen meldingen in deze periode.</li>';
+}
+
+function renderSenders(list) {
+  const rows = countBy(list, m => m.sender).slice(0, 8);
+  const max = rows.length ? rows[0][1] : 1;
+  $('#senders').innerHTML = rows.length ? rows.map(([s, n]) =>
+    `<li><span class="name">${esc(s)}</span><span class="num">${nf.format(n)}</span><span class="bar"><span style="width:${(n / max * 100).toFixed(1)}%"></span></span></li>`).join('')
+    : '<li class="empty">Nog niemand.</li>';
+}
+
+function renderFeed(list) {
+  const q = state.q.trim().toLowerCase();
+  const rows = [];
+  for (let i = list.length - 1; i >= 0 && rows.length < 60; i--) {
+    const m = list[i];
+    if (q && !(m.text.toLowerCase().includes(q) || m.sender.toLowerCase().includes(q) || m.chat.toLowerCase().includes(q))) continue;
+    rows.push(m);
+  }
+  $('#feed').innerHTML = rows.length ? rows.map(m => {
+    const night = isNight(m.date.getHours());
+    const txt = m.text.length > 180 ? m.text.slice(0, 180) + '…' : m.text;
+    const who = m.chat === m.sender ? `<b>${esc(m.sender)}</b>` : `<b>${esc(m.sender)}</b> in ${esc(m.chat)}`;
+    return `<li><time class="${night ? 'night' : ''}" datetime="${m.date.toISOString()}">${fmtDate(m.date)}<br>${fmtTime(m.date)}</time>
+      <span class="who">${who}</span>
+      <span class="msg">${m.media ? '<span class="tag">media</span>' : esc(txt)}</span></li>`;
+  }).join('') : `<li class="empty">${q ? 'Niets gevonden voor deze zoekterm.' : 'Geen meldingen in deze periode.'}</li>`;
+}
+
+/* ---------- Events ---------- */
+$('#period').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.period = b.dataset.p; store.set('wa-radar-period', state.period); render();
+});
+$('#me').addEventListener('change', e => { state.me = e.target.value; if (!state.sample) store.set('wa-radar-me', state.me); render(); });
+$('#q').addEventListener('input', e => { state.q = e.target.value; const { start, end } = window_(); renderFeed(incoming(start, end)); });
+$('#chats').addEventListener('click', e => {
+  const b = e.target.closest('button[data-chat]'); if (!b) return;
+  state.chat = state.chat === b.dataset.chat ? null : b.dataset.chat; render();
+});
+$('#filterbar').addEventListener('click', e => { if (e.target.closest('#clearchat')) { state.chat = null; render(); } });
+$('#file').addEventListener('change', e => { if (e.target.files.length) loadFiles([...e.target.files]); e.target.value = ''; });
+$('#reset').addEventListener('click', () => { useSample(); pickMe(); $('#status').textContent = ''; render(); });
+const drop = $('#drop');
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { const f = [...(e.dataTransfer?.files || [])]; if (f.length) loadFiles(f); });
+
+let rt;
+window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const { start, end } = window_(); const l = incoming(start, end); const days = Math.max(1, Math.round((sod(end) - start) / DAY) + 1); renderDaily(l, start, days); renderHeat(l); }, 120); });
+
+const savedP = store.get('wa-radar-period');
+if (savedP && ['7', '30', '90', '365', 'all'].includes(savedP)) state.period = savedP;
+useSample();
+pickMe();
+render();
+})();
+</script>
